@@ -1,0 +1,6 @@
+{
+  "name": "Undangan Online",
+  "description": "Platform pembuatan dan pengelolaan undangan online interaktif dengan RSVP, kustomisasi tema, import daftar tamu CSV, pelacakan statistik, dan halaman undangan publik.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
