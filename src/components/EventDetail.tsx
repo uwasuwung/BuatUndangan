@@ -13,9 +13,9 @@ import {
   Send, Mail, Eye, Grid3X3, Star, Map, Compass, Locate, Activity, 
   Info, X, MailCheck, BellRing, Printer, QrCode,
   Heart, Gift, Building2, Baby, Video, Store, Disc, HeartHandshake, GraduationCap, 
-  Trophy, BookOpen, Vote, Sparkles
+  Trophy, BookOpen, Vote, Sparkles, Save, Image
 } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
 
 // Simple projection from lat/lng to mercator-like flat projection of Indonesia region
 function projectCoordinates(lat: number, lng: number) {
@@ -55,6 +55,29 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
   const [pdfIncludeTrimMarks, setPdfIncludeTrimMarks] = useState<boolean>(true);
   const [pdfAccentColor, setPdfAccentColor] = useState<string>('#18181b');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+
+  // Background music editing states
+  const [editMusicEnabled, setEditMusicEnabled] = useState<boolean>(true);
+  const [editMusicUrl, setEditMusicUrl] = useState<string>('https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3');
+  const [editMusicTitle, setEditMusicTitle] = useState<string>('Beautiful Dream Piano');
+  const [editCustomMusicUrl, setEditCustomMusicUrl] = useState<string>('');
+  const [isTestingEditMusic, setIsTestingEditMusic] = useState<boolean>(false);
+  const [musicSaveSuccess, setMusicSaveSuccess] = useState<boolean>(false);
+  const [hasInitializedMusicState, setHasInitializedMusicState] = useState<boolean>(false);
+
+  // Maps custom embed states
+  const [editMapsIframe, setEditMapsIframe] = useState<string>('');
+  const [mapsSaveSuccess, setMapsSaveSuccess] = useState<boolean>(false);
+
+  // Guest invitation views chart states
+  const [guestViewsBarLimit, setGuestViewsBarLimit] = useState<number>(10);
+  const [guestViewsSearch, setGuestViewsSearch] = useState<string>('');
+  const [guestViewsSort, setGuestViewsSort] = useState<'highest' | 'lowest' | 'alphabetical'>('highest');
+
+  // Photo gallery configuration states
+  const [editGalleryPhotos, setEditGalleryPhotos] = useState<string[]>([]);
+  const [gallerySaveSuccess, setGallerySaveSuccess] = useState<boolean>(false);
+  const [galleryInputUrl, setGalleryInputUrl] = useState<string>('');
 
   const handleDownloadGuestPdf = async (guest: Guest) => {
     try {
@@ -546,6 +569,123 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
     return unsubscribe;
   }, [eventId]);
 
+  // Load backend background music configuration into editing states once loaded
+  useEffect(() => {
+    if (event && !hasInitializedMusicState) {
+      setEditMusicEnabled(event.music_enabled !== false);
+      setEditMusicUrl(event.music_url || 'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3');
+      setEditMusicTitle(event.music_title || 'Beautiful Dream Piano');
+      if (event.music_url && ![
+        'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3',
+        'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3',
+        'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3',
+        'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3',
+        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
+      ].includes(event.music_url)) {
+        setEditCustomMusicUrl(event.music_url);
+      }
+      setEditMapsIframe(event.maps_iframe || '');
+      setEditGalleryPhotos(event.gallery_photos || []);
+      setHasInitializedMusicState(true);
+    }
+  }, [event, hasInitializedMusicState]);
+
+  const handleSaveBackgroundMusic = () => {
+    if (!event) return;
+    
+    // Pause testing audio first
+    try {
+      const audioEl = document.getElementById('detail-music-test-audio') as HTMLAudioElement;
+      if (audioEl) {
+        audioEl.pause();
+        setIsTestingEditMusic(false);
+      }
+    } catch (e) {}
+
+    const res = db.updateEvent(event.id, {
+      music_enabled: editMusicEnabled,
+      music_url: editMusicUrl || undefined,
+      music_title: editMusicTitle || undefined
+    });
+
+    if (res.success) {
+      setMusicSaveSuccess(true);
+      setTimeout(() => setMusicSaveSuccess(false), 3000);
+    } else {
+      alert('Gagal menyimpan musik: ' + res.error);
+    }
+  };
+
+  const handleSaveGoogleMaps = () => {
+    if (!event) return;
+
+    let finalEmbedUrl = editMapsIframe.trim();
+    
+    // Try to extract src if the user pasted a full HTML iframe tag block
+    const srcMatch = finalEmbedUrl.match(/src="([^"]+)"/);
+    if (srcMatch && srcMatch[1]) {
+      finalEmbedUrl = srcMatch[1];
+    }
+
+    const res = db.updateEvent(event.id, {
+      maps_iframe: finalEmbedUrl || undefined
+    });
+
+    if (res.success) {
+      setMapsSaveSuccess(true);
+      setTimeout(() => setMapsSaveSuccess(false), 3000);
+    } else {
+      alert('Gagal menyimpan koordinat maps: ' + res.error);
+    }
+  };
+
+  const handleAddGalleryUrl = () => {
+    if (!galleryInputUrl.trim()) return;
+    setEditGalleryPhotos((prev) => [...prev, galleryInputUrl.trim()]);
+    setGalleryInputUrl('');
+  };
+
+  const handleUploadGalleryPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const readPromises = Array.from(files).map((file: any) => {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          resolve(event.target?.result as string);
+        };
+        reader.onerror = () => reject(new Error("Gagal membaca file gambar"));
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readPromises)
+      .then((newPhotos) => {
+        setEditGalleryPhotos((prev) => [...prev, ...newPhotos]);
+      })
+      .catch((err) => {
+        alert(err.message || "Gagal mengunggah foto.");
+      });
+  };
+
+  const handleRemoveGalleryPhoto = (index: number) => {
+    setEditGalleryPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveGalleryPhotos = () => {
+    if (!event) return;
+    const res = db.updateEvent(event.id, {
+      gallery_photos: editGalleryPhotos
+    });
+    if (res.success) {
+      setGallerySaveSuccess(true);
+      setTimeout(() => setGallerySaveSuccess(false), 3000);
+    } else {
+      alert('Gagal menyimpan galeri foto: ' + res.error);
+    }
+  };
+
   if (!event) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-slate-50 text-slate-800">
@@ -690,6 +830,48 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
   const totalRombonganHadir = guests
     .filter((g) => g.rsvp_status === 'hadir')
     .reduce((acc, g) => acc + (g.number_of_guests || 0), 0);
+
+  // Process guest-by-guest views statistics
+  const getGuestViewsAnalytics = () => {
+    const rawData = guests.map((g) => {
+      const gViews = eventViews.filter((v) => v.guest_id === g.id);
+      return {
+        id: g.id,
+        name: g.name,
+        views: gViews.length,
+        rsvp_status: g.rsvp_status,
+        lastViewed: gViews.length > 0
+          ? [...gViews].sort((a, b) => new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime())[0].viewed_at
+          : null
+      };
+    });
+
+    // Filter by search query
+    let filtered = rawData;
+    if (guestViewsSearch.trim()) {
+      const q = guestViewsSearch.toLowerCase();
+      filtered = filtered.filter((g) => g.name.toLowerCase().includes(q));
+    }
+
+    // Sort accordingly
+    if (guestViewsSort === 'highest') {
+      filtered.sort((a, b) => b.views - a.views);
+    } else if (guestViewsSort === 'lowest') {
+      filtered.sort((a, b) => a.views - b.views);
+    } else if (guestViewsSort === 'alphabetical') {
+      filtered.sort((a, b) => a.name.localeCompare(b.name, 'id-ID'));
+    }
+
+    return filtered;
+  };
+
+  const guestViewsAnalyticsData = getGuestViewsAnalytics();
+  const maxIndividualViews = Math.max(...guestViewsAnalyticsData.map((d) => d.views), 1);
+
+  // Limited data purely for Recharts display
+  const chartFilteredData = guestViewsBarLimit === -1 
+    ? guestViewsAnalyticsData 
+    : guestViewsAnalyticsData.slice(0, guestViewsBarLimit);
 
   // Generate beautiful 7-day chronological views trend array for AreaChart
   const getViewsTrendData = () => {
@@ -1074,6 +1256,450 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
           )}
         </div>
 
+        {/* BACKGROUND MUSIC SETTINGS PANEL */}
+        <div className="bg-white rounded-3xl p-6 border border-[#EBEBE5] shadow-xs mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-150 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Disc className="h-4.5 w-4.5 text-indigo-600 animate-[spin_5s_linear_infinite]" />
+              <span className="text-[11px] font-black text-zinc-900 uppercase tracking-widest font-mono">
+                🎵 PENGATURAN MUSIK LATAR BELAKANG UNDANGAN
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-2 sm:mt-0">
+              <span className="text-[10px] font-bold text-zinc-700">Aktifkan Background Music:</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={editMusicEnabled}
+                  onChange={(e) => setEditMusicEnabled(e.target.checked)}
+                />
+                <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-650"></div>
+              </label>
+            </div>
+          </div>
+
+          <p className="text-xs text-zinc-550 leading-relaxed text-left mb-4 font-semibold text-zinc-600">
+            Musik yang Anda aktifkan di bawah ini akan otomatis dimutasi pada saat awal muat halaman demi mematuhi regulasi peramban, dan akan diputar secara instan serta elegan ketika tamu mengklik tombol <strong>&quot;Buka Undangan&quot;</strong>.
+          </p>
+
+          {editMusicEnabled ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider mb-2 font-mono">
+                    🎵 PILIH TRACK LAGU PRESET
+                  </label>
+                  <select
+                    value={[
+                      'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3',
+                      'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
+                    ].includes(editMusicUrl) ? editMusicUrl : 'custom'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'custom') {
+                        setEditMusicUrl(editCustomMusicUrl || '');
+                      } else {
+                        setEditMusicUrl(val);
+                        if (val === 'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3') {
+                          setEditMusicTitle('Beautiful Dream Piano');
+                        } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3') {
+                          setEditMusicTitle('Sunny Day Acoustic');
+                        } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3') {
+                          setEditMusicTitle('Forest Trail Harp');
+                        } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3') {
+                          setEditMusicTitle('Just Cool Elegant Jazz');
+                        } else if (val === 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3') {
+                          setEditMusicTitle('Traditional Gamelan Calm');
+                        }
+                      }
+                    }}
+                    className="block w-full border border-zinc-250 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-900 bg-zinc-50"
+                  >
+                    <option value="https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3">Beautiful Dream Piano (Wedding/Romantic) 🌸</option>
+                    <option value="https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3">Sunny Day Acoustic (Warm/Birthday) 🍰</option>
+                    <option value="https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3">Forest Trail Harp (Classical/Elegant) 🎻</option>
+                    <option value="https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3">Just Cool Elegant Jazz (Corp/Lounge) 🎷</option>
+                    <option value="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3">Traditional Instrumental Calm (Indonesian Gamelan) 🇮🇩</option>
+                    <option value="custom">Custom MP3 Audio URL (Embed Tautan Mandiri) 🔗</option>
+                  </select>
+                </div>
+
+                {(![
+                  'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3',
+                  'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3',
+                  'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3',
+                  'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3',
+                  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
+                ].includes(editMusicUrl) || editMusicUrl === '') && (
+                  <div>
+                    <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider mb-2 font-mono">
+                      Masukkan Taut-an File MP3 Langsung (Audio Link)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Contoh: https://kamu.com/media/audio.mp3"
+                      value={editCustomMusicUrl}
+                      onChange={(e) => {
+                        setEditCustomMusicUrl(e.target.value);
+                        setEditMusicUrl(e.target.value);
+                      }}
+                      className="block w-full border border-zinc-250 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-800 bg-[#FAF9F6] font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider mb-2 font-mono">
+                    🏷️ JUDUL TAMPILAN TRACK LAGU (DI UNDANGAN)
+                  </label>
+                  <input
+                    type="text"
+                    value={editMusicTitle}
+                    onChange={(e) => setEditMusicTitle(e.target.value)}
+                    placeholder="Contoh: Sayup Alunan Kecapi Sunda"
+                    className="block w-full border border-zinc-250 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-900 bg-zinc-50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="flex items-center">
+                    {editMusicUrl ? (
+                      <div className="w-full flex items-center">
+                        <audio id="detail-music-test-audio" src={editMusicUrl} loop />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const audioEl = document.getElementById('detail-music-test-audio') as HTMLAudioElement;
+                            if (audioEl) {
+                              if (isTestingEditMusic) {
+                                audioEl.pause();
+                                setIsTestingEditMusic(false);
+                              } else {
+                                audioEl.play().catch(e => console.warn('Blocked autoplay test:', e));
+                                setIsTestingEditMusic(true);
+                              }
+                            }
+                          }}
+                          className={`w-full py-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                            isTestingEditMusic 
+                              ? 'bg-[#EEF2FF] border-indigo-200 text-indigo-700 font-extrabold animate-pulse' 
+                              : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-800'
+                          }`}
+                        >
+                          {isTestingEditMusic ? '⏸️ Hentikan Tes' : '▶️ Tes Mainkan'}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-amber-600 block pl-1 font-semibold italic">Silakan pilih lagu.</span>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleSaveBackgroundMusic}
+                    className="w-full bg-[#312e81] hover:bg-indigo-900 text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                  >
+                    {musicSaveSuccess ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        Disimpan!
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Simpan Musik
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-dashed border-zinc-200 p-6 rounded-2xl flex flex-col items-center justify-center bg-zinc-50 text-center">
+              <span className="text-zinc-400 text-xl">🔇</span>
+              <p className="text-xs font-bold text-zinc-500 mt-2">Musik latar belakang saat ini dinonaktifkan.</p>
+              <p className="text-[10px] text-zinc-400 mt-1">Gunakan toggle di sudut kanan atas panel ini untuk mengaktifkannya kembali.</p>
+              <button
+                onClick={() => {
+                  setEditMusicEnabled(true);
+                  db.updateEvent(event.id, { music_enabled: true });
+                }}
+                className="mt-3 px-4 py-1.5 bg-zinc-150 border border-zinc-200 text-zinc-800 rounded-lg text-[10px] font-bold hover:bg-zinc-200 transition-all cursor-pointer"
+              >
+                Aktifkan Sekarang
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* GOOGLE MAPS EMBED SETTINGS PANEL */}
+        <div className="bg-white rounded-3xl p-6 border border-[#EBEBE5] shadow-xs mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-150 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Map className="h-4.5 w-4.5 text-rose-500 animate-[pulse_2s_infinite]" />
+              <span className="text-[11px] font-black text-zinc-900 uppercase tracking-widest font-mono">
+                🗺️ EMBED LOKASI ACARA (MAPS GOOGLE)
+              </span>
+            </div>
+            <div className="text-[10px] text-zinc-400 font-bold font-mono">
+              GPS STATUS: ACTIVE
+            </div>
+          </div>
+
+          <p className="text-xs text-zinc-555 leading-relaxed text-left mb-5 font-semibold text-zinc-600">
+            Tempelkan link berbagi Google Maps (dari menu Bagikan &gt; Sematkan peta (Embed Map) atau link koordinat) sehingga tamu dapat melihat peta integrasi interaktif langsung di halaman undangan digital mereka secara responsive.
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-left">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider mb-2 font-mono">
+                  🔗 TAUTAN MAPS ATAU KODE EMBED (IFRAME HTML)
+                </label>
+                <textarea
+                  rows={4}
+                  value={editMapsIframe}
+                  onChange={(e) => setEditMapsIframe(e.target.value)}
+                  placeholder="Contoh: <iframe src=&quot;https://www.google.com/maps/embed?...&quot; ...></iframe> atau https://www.google.com/maps/embed?pb=..."
+                  className="block w-full border border-zinc-250 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-1 focus:ring-rose-550 text-zinc-900 bg-zinc-50 font-mono resize-none leading-relaxed"
+                />
+                <p className="text-[10px] text-zinc-400 mt-2">
+                  *Tips: Anda dapat menyalin kode HTML dari Google Maps (&quot;Bagikan&quot; &gt; &quot;Sematkan Peta&quot;), sistem kami akan mendeteksi dan mengekstrak tautan peta secara otomatis!
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveGoogleMaps}
+                  className="px-6 py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                >
+                  {mapsSaveSuccess ? (
+                    <>
+                      <Check className="h-4 w-4 text-emerald-400" />
+                      Denah Lokasi Tersimpan!
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Simpan Denah Lokasi Map
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <span className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider mb-2 font-mono">
+                👁️ PRATINJAU MAP INTRAKTIF (PREVIEW)
+              </span>
+              <div className="flex-1 min-h-[170px] bg-zinc-50 border border-dashed border-zinc-200 rounded-2xl flex items-center justify-center overflow-hidden relative">
+                {editMapsIframe ? (
+                  <iframe
+                    title="Pratinjau Map Lokasi"
+                    src={(() => {
+                      let url = editMapsIframe.trim();
+                      const srcMatch = url.match(/src="([^"]+)"/);
+                      if (srcMatch && srcMatch[1]) {
+                        return srcMatch[1];
+                      }
+                      return url;
+                    })()}
+                    className="w-full h-full min-h-[180px] border-0"
+                    allowFullScreen
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="text-center p-4">
+                    <span className="text-zinc-300 text-2xl block mb-2">🗺️</span>
+                    <p className="text-[11px] font-bold text-zinc-400">Belum ada peta lokasi tersemat</p>
+                    <p className="text-[9px] text-zinc-400 mt-1">Tempelkan link embed di sebelah kiri untuk melihat peta.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* --- PHOTO GALLERY SETTINGS PANEL --- */}
+        <div id="photo-gallery-settings-panel" className="bg-white rounded-3xl p-6 border border-[#EBEBE5] shadow-xs mb-8 text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-150 pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Image className="h-4.5 w-4.5 text-indigo-600 animate-[pulse_2.5s_infinite]" />
+              <span className="text-[11px] font-black text-zinc-900 uppercase tracking-widest font-mono">
+                🌸 GALERI FOTO PRE-EVENT & ENGAGEMENT
+              </span>
+            </div>
+            <div className="text-[10px] text-zinc-400 font-bold font-mono">
+              STATUS: {editGalleryPhotos.length} FOTO TERUNGGAH
+            </div>
+          </div>
+
+          <p className="text-xs text-zinc-650 leading-relaxed mb-5 font-semibold text-zinc-600">
+            Unggah foto-foto romantis, lamaran, atau pertunangan Anda (atau tautkan foto online dari Unsplash, Pinterest, blog, dll.) untuk disematkan sebagai karusel visual yang indah di halaman undangan publik Anda.
+          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Control Panel: Column Span 5 */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Local file uploader */}
+              <div className="border border-dashed border-zinc-250 bg-zinc-50 hover:bg-zinc-100 transition-all rounded-2xl p-5 text-center cursor-pointer relative group">
+                <input
+                  type="file"
+                  multiple
+                  id="dashboard-gallery-uploader"
+                  accept="image/*"
+                  onChange={handleUploadGalleryPhoto}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <span className="text-2xl block mb-1">📸</span>
+                <span className="block text-xs font-bold text-zinc-700">Pilih / Unggah Berkas Foto</span>
+                <span className="block text-[10px] text-zinc-400 mt-1">Dukung format JPG, PNG, WEBP (bisa pilih banyak berkas sekaligus)</span>
+              </div>
+
+              {/* URL paste uploader */}
+              <div className="bg-zinc-50 border border-zinc-100 p-4 rounded-2xl text-xs space-y-2.5">
+                <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider font-mono">
+                  🔗 Tautkan Link Foto Eksternal
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="Contoh: https://images.unsplash.com/photo-..."
+                    value={galleryInputUrl}
+                    onChange={(e) => setGalleryInputUrl(e.target.value)}
+                    className="flex-1 border border-zinc-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 bg-white font-mono leading-relaxed"
+                  />
+                  <button
+                    onClick={handleAddGalleryUrl}
+                    className="px-4 py-2 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Tambahkan
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400">
+                  Gunakan kolom di atas jika Anda ingin memasukkan URL foto yang sudah di-host di layanan pihak ketiga.
+                </p>
+              </div>
+
+              {/* presets generator */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-[10px] font-bold text-zinc-450">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const samplePresets = [
+                      'https://images.unsplash.com/photo-1519225495810-7517c319867b?q=80&w=1200&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=80&w=1200&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?q=80&w=1200&auto=format&fit=crop',
+                      'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=1200&auto=format&fit=crop'
+                    ];
+                    setEditGalleryPhotos((prev) => [...prev, ...samplePresets]);
+                  }}
+                  className="px-3 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[10px] font-bold rounded-lg cursor-pointer transition-all"
+                >
+                  ✨ Isi 4 Foto Contoh Instan
+                </button>
+                {editGalleryPhotos.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Anda yakin ingin mengosongkan seluruh foto galeri?')) {
+                        setEditGalleryPhotos([]);
+                      }
+                    }}
+                    className="px-3 py-1 bg-zinc-100 hover:bg-zinc-200 border border-zinc-250 text-zinc-700 text-[10px] font-bold rounded-lg cursor-pointer transition-all"
+                  >
+                    Kosongkan
+                  </button>
+                )}
+              </div>
+
+              {/* Save changes action */}
+              <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  SINKRONISASI: {editGalleryPhotos.length} ITEM
+                </span>
+                <button
+                  onClick={handleSaveGalleryPhotos}
+                  className="px-6 py-3 bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-xs shrink-0"
+                >
+                  {gallerySaveSuccess ? (
+                    <>
+                      <Check className="h-4 w-4 text-emerald-400" />
+                      Galeri Tersimpan!
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Simpan Galeri Foto
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Display / List Grid Panel: Column Span 7 */}
+            <div className="lg:col-span-7 bg-[#FAF9F6]/50 border border-zinc-150 rounded-2xl p-4 min-h-[220px] flex flex-col justify-between">
+              <div>
+                <span className="text-[9px] font-black text-zinc-400 uppercase tracking-wider font-mono block">
+                  📂 PRATINJAU TATA LETAK GALERI (GRID)
+                </span>
+                <p className="text-xs font-bold text-zinc-850">
+                  Daftar Peta Susunan Galeri Tamu
+                </p>
+              </div>
+
+              {editGalleryPhotos.length === 0 ? (
+                <div className="my-auto py-10 text-center text-zinc-400">
+                  <span className="text-3xl block mb-2">🌸</span>
+                  <p className="text-xs font-bold">Belum ada foto galeri terpasang</p>
+                  <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
+                    Pilih file foto lokal di sebelah kiri atau masukkan link demo preset Unsplash untuk mensimulasikan foto di undangan publik.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[240px] p-1 my-4">
+                  {editGalleryPhotos.map((photo, pIdx) => (
+                    <div key={pIdx} className="relative aspect-[3/4] rounded-xl overflow-hidden group border border-zinc-150 bg-zinc-100 shadow-2xs">
+                      <img
+                        src={photo}
+                        alt={`Galeri Pre-Event ${pIdx + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      {/* Floating Indicator */}
+                      <span className="absolute top-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[8px] font-bold px-1.5 py-0.5 rounded-sm font-mono z-10">
+                        #{pIdx + 1}
+                      </span>
+                      {/* Delete Overlay */}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 z-20">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveGalleryPhoto(pIdx)}
+                          className="p-2 bg-rose-650 hover:bg-rose-700 text-white rounded-lg cursor-pointer transition-transform duration-100 transform active:scale-95 shadow-md flex items-center justify-center"
+                          title="Hapus Foto"
+                        >
+                          <Trash2 className="h-4.5 w-4.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="text-[9px] text-zinc-400 border-t border-zinc-150 pt-2 font-bold font-mono">
+                * CAROUSEL AKAN DIURUTKAN SESUAI NOMOR FOTO DIATAS
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Aggregate Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-4 border border-zinc-200 shadow-2xs">
@@ -1369,7 +1995,7 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
               )}
             </div>
 
-            <div className="text-[9px] text-zinc-400 border-t border-zinc-100 pt-3 flex items-center justify-between font-mono">
+            <div className="text-[9px] text-zinc-400 border-t border-zinc-100 pt-3 flex items-center justify-between font-mono font-semibold">
               <span className="flex items-center gap-1.5 font-bold">
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></span>
                 Websocket SMTP Relay Aktif
@@ -1378,6 +2004,231 @@ export default function EventDetail({ eventId, onNavigate, onSelectGuestInvitati
             </div>
           </div>
 
+        </div>
+
+        {/* --- GUEST INVITATION VIEWS TRACKER ANALYTICS PANEL --- */}
+        <div className="bg-white rounded-3xl p-6 border border-[#EBEBE5] shadow-xs mb-10 text-left">
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-zinc-150 pb-3 mb-5 gap-3">
+            <div className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-indigo-650 animate-pulse animate-[pulse_2.5s_infinite]" />
+              <div>
+                <span className="text-[11px] font-black text-zinc-900 uppercase tracking-widest font-mono block">
+                  📈 ANALISIS KUNJUNGAN PER TAMU UNDANGAN
+                </span>
+                <p className="text-[10px] text-zinc-400 font-semibold font-mono">
+                  REAL-TIME TRAFFIC & INTERACTION MONITOR
+                </p>
+              </div>
+            </div>
+            {/* Filter and control block */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-450" />
+                <input
+                  type="text"
+                  placeholder="Cari nama tamu..."
+                  value={guestViewsSearch}
+                  onChange={(e) => setGuestViewsSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 border border-zinc-200 rounded-xl text-xs bg-zinc-50 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold text-zinc-800 w-full sm:w-44"
+                />
+                {guestViewsSearch && (
+                  <button
+                    onClick={() => setGuestViewsSearch('')}
+                    className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-650 text-[10px] font-extrabold cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Sort dropdown */}
+              <select
+                value={guestViewsSort}
+                onChange={(e) => setGuestViewsSort(e.target.value as any)}
+                className="px-2.5 py-1.5 border border-zinc-250 rounded-xl text-xs bg-white text-zinc-700 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="highest">📈 Views Tertinggi</option>
+                <option value="lowest">📉 Views Terendah</option>
+                <option value="alphabetical">🔤 Nama (A-Z)</option>
+              </select>
+
+              {/* Limit dropdown */}
+              <select
+                value={guestViewsBarLimit}
+                onChange={(e) => setGuestViewsBarLimit(Number(e.target.value))}
+                className="px-2.5 py-1.5 border border-zinc-250 rounded-xl text-xs bg-white text-[#333333] font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value={5}>Top 5 Tamu</option>
+                <option value={10}>Top 10 Tamu</option>
+                <option value={20}>Top 20 Tamu</option>
+                <option value={50}>Top 50 Tamu</option>
+                <option value={-1}>Tampilkan Semua</option>
+              </select>
+            </div>
+          </div>
+
+          <p className="text-xs text-zinc-600 leading-relaxed mb-6 font-medium">
+            Grafik ini memetakan intensitas interaksi setiap tamu dalam membaca undangan digital mereka. Tamu yang sering membuka tautan menandakan keaktifan komunikasi menjelang hari-H penyelenggaraan acara.
+          </p>
+
+          {guests.length === 0 ? (
+            <div className="bg-zinc-50 border border-dashed border-zinc-200 rounded-2xl py-12 text-center">
+              <Users className="h-8 w-8 text-zinc-300 mx-auto mb-2" />
+              <p className="text-xs font-bold text-zinc-400">Belum Ada Tamu Terdaftar</p>
+              <p className="text-[10px] text-zinc-400 mt-1">Tambahkan tamu pada daftar tamu terlebih dahulu untuk mulai melacak kunjungan mereka.</p>
+            </div>
+          ) : eventViews.length === 0 ? (
+            <div className="bg-zinc-50 border border-dashed border-zinc-200 rounded-2xl py-12 text-center">
+              <Eye className="h-8 w-8 text-zinc-300 mx-auto mb-2" />
+              <p className="text-xs font-bold text-zinc-400">Belum Ada Riwayat Kunjungan Undangan</p>
+              <p className="text-[10px] text-zinc-400 mt-1">Belum ada tamu yang mengakses tautan milik mereka. Salin dan kirimkan undangan untuk merekam interaksi ini!</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Dynamic Left Column: Recharts Horizontal Bar Chart */}
+              <div className="lg:col-span-7 bg-zinc-50 border border-zinc-150 rounded-2xl p-4 h-[350px] flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-black font-mono text-indigo-650 uppercase tracking-wider block">Visualisasi Sebaran</span>
+                  <p className="text-xs font-bold text-zinc-900">Perbandingan Total Pembukaan Tautan</p>
+                </div>
+
+                <div className="grow w-full h-56 mt-4 relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={chartFilteredData}
+                      margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={true} vertical={false} />
+                      <XAxis 
+                        type="number" 
+                        stroke="#71717a" 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false} 
+                        allowDecimals={false}
+                      />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        stroke="#71717a" 
+                        fontSize={10} 
+                        tickLine={false} 
+                        axisLine={false}
+                        width={75}
+                        tickFormatter={(value) => value.length > 11 ? `${value.substring(0, 10)}...` : value}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(79, 70, 229, 0.04)' }}
+                        contentStyle={{
+                          borderRadius: '12px',
+                          border: '1px solid #e4e4e7',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+                        }}
+                        formatter={(value: any, name: any, props: any) => {
+                          const payload = props.payload;
+                          let rsvpBadge = 'PENDING';
+                          if (payload.rsvp_status === 'hadir') rsvpBadge = 'HADIR';
+                          if (payload.rsvp_status === 'tidak_hadir') rsvpBadge = 'ABSEN';
+                          return [
+                            <div>
+                              <p className="text-[#1a1a1a] font-extrabold">{value} Kali Dibuka</p>
+                              <p className="text-[9px] text-indigo-650 mt-1 uppercase font-mono tracking-wider font-extrabold">Status RSVP: {rsvpBadge}</p>
+                            </div>,
+                            'Kunjungan'
+                          ];
+                        }}
+                      />
+                      <Bar 
+                        dataKey="views" 
+                        radius={[0, 4, 4, 0]}
+                        fill="#4f46e5"
+                        barSize={14}
+                      >
+                        {chartFilteredData.map((entry, index) => {
+                          const shadeOfBlue = index === 0 ? '#312e81' : '#4f46e5';
+                          return <Cell key={`cell-${index}`} fill={shadeOfBlue} className="transition-all duration-300 hover:opacity-85" />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                <div className="flex justify-between items-center text-[9px] font-mono font-bold text-zinc-400 mt-1.5 border-t border-zinc-150 pt-2">
+                  <span>* Menampilkan {chartFilteredData.length} dari {guestViewsAnalyticsData.length} tamu terfilter</span>
+                  <span>Sumbu-Y: Nama Tamu | Sumbu-X: Frekuensi Hit Undangan</span>
+                </div>
+              </div>
+
+              {/* Dynamic Right Column: Detailed Scrolling Interactions List */}
+              <div className="lg:col-span-5 border border-zinc-150 rounded-2xl p-4 h-[350px] flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-black font-mono text-zinc-400 uppercase tracking-wider block">Log Tautan Terbuka</span>
+                  <p className="text-xs font-bold text-[#1A1A1A]">Daftar Tamu & Intensitas Baca</p>
+                </div>
+
+                <div className="grow my-4 overflow-y-auto pr-1 space-y-2.5 max-h-[220px]">
+                  {guestViewsAnalyticsData.map((gAnalytic) => {
+                    const progressPercent = Math.max(2, Math.round((gAnalytic.views / maxIndividualViews) * 100));
+                    const isNeverViewed = gAnalytic.views === 0;
+                    
+                    return (
+                      <div key={gAnalytic.id} className="text-xs bg-[#FAF9F6]/40 hover:bg-zinc-50 transition-all p-2.5 rounded-xl border border-zinc-100 flex flex-col justify-between gap-1.5 font-semibold text-zinc-700">
+                        <div className="flex items-center justify-between font-extrabold">
+                          <span className="text-zinc-900 truncate max-w-[170px] text-left">
+                            👤 {gAnalytic.name}
+                          </span>
+                          <span className={`font-mono text-[10px] ${
+                            isNeverViewed 
+                              ? 'text-zinc-400 font-medium' 
+                              : 'text-indigo-650 font-extrabold bg-indigo-50/50 px-2 py-0.5 rounded-lg border border-indigo-100/50'
+                          }`}>
+                            {gAnalytic.views} Views
+                          </span>
+                        </div>
+
+                        {/* Progress line indicator */}
+                        <div className="w-full bg-zinc-100 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isNeverViewed ? 'bg-zinc-200' : 'bg-indigo-650'
+                            }`}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[9px] text-zinc-450 font-mono mt-0.5">
+                          <span>
+                            RSVP: <span className={`font-extrabold ${
+                              gAnalytic.rsvp_status === 'hadir' 
+                                ? 'text-emerald-500' 
+                                : gAnalytic.rsvp_status === 'tidak_hadir' 
+                                  ? 'text-rose-450' 
+                                  : 'text-zinc-500'
+                            }`}>{gAnalytic.rsvp_status.toUpperCase()}</span>
+                          </span>
+                          <span className="font-semibold text-right text-[8.5px]">
+                            {gAnalytic.lastViewed 
+                              ? `Akses: ${new Date(gAnalytic.lastViewed).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} ${new Date(gAnalytic.lastViewed).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+                              : 'Belum pernah dibaca'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="text-[10px] text-zinc-400 border-t border-zinc-100 pt-3 flex items-center justify-between font-bold font-mono">
+                  <span>UNIK DIBUKA: {guestViewsTotal} TAMU</span>
+                  <span>BELUM DIBACA: {guests.filter(g => !allViews.some(v => v.guest_id === g.id)).length} TAMU</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* --- PREMIUM TERMINAL CHECK-IN GUEST PANEL --- */}

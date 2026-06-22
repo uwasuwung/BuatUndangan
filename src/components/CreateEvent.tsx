@@ -87,6 +87,14 @@ export default function CreateEvent({ onNavigate }: CreateEventProps) {
   const [abTestEnabled, setAbTestEnabled] = useState(false);
   const [latitude, setLatitude] = useState(-6.2088);
   const [longitude, setLongitude] = useState(106.8456);
+  const [mapsIframe, setMapsIframe] = useState('');
+  
+  // Background music states
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [musicTitle, setMusicTitle] = useState('Beautiful Dream Piano');
+  const [musicUrl, setMusicUrl] = useState('https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3');
+  const [customMusicUrl, setCustomMusicUrl] = useState('');
+  const [isTestingMusic, setIsTestingMusic] = useState(false);
   
   const [plan, setPlan] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -197,6 +205,18 @@ export default function CreateEvent({ onNavigate }: CreateEventProps) {
         custom_fields.gender_guesses_raw = babyGenderGuesses;
       }
 
+      // Pause any creator testing audio before routing away
+      try {
+        const audioEl = document.getElementById('creator-music-test-audio') as HTMLAudioElement;
+        if (audioEl) audioEl.pause();
+      } catch (e) {}
+
+      let finalMapsIframe = mapsIframe.trim();
+      const srcMatch = finalMapsIframe.match(/src="([^"]+)"/);
+      if (srcMatch && srcMatch[1]) {
+        finalMapsIframe = srcMatch[1];
+      }
+
       // Save premium settings utilizing the new update module
       db.updateEvent(result.eventId, {
         live_stream_url: liveStreamUrl || undefined,
@@ -206,7 +226,11 @@ export default function CreateEvent({ onNavigate }: CreateEventProps) {
         latitude,
         longitude,
         event_type: eventType,
-        custom_fields
+        custom_fields,
+        music_url: musicUrl || undefined,
+        music_enabled: musicEnabled,
+        music_title: musicTitle || undefined,
+        maps_iframe: finalMapsIframe || undefined,
       });
       onNavigate('/dashboard/events');
     } else {
@@ -538,6 +562,187 @@ export default function CreateEvent({ onNavigate }: CreateEventProps) {
                   />
                 </div>
               </div>
+
+              {/* Google Maps embed code */}
+              <div className="col-span-1 md:col-span-2 border-t border-amber-500/10 pt-4 mt-2">
+                <label className="block text-[10px] font-bold text-zinc-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  🗺️ Google Maps Embed Link / Iframe (Sematkan Peta)
+                </label>
+                <textarea
+                  rows={2}
+                  value={mapsIframe}
+                  onChange={(e) => setMapsIframe(e.target.value)}
+                  placeholder="Tempel tautan map atau kode iframe embed di sini, contoh: <iframe src='https://www.google.com/maps/embed?...' ...></iframe>"
+                  className="block w-full border border-zinc-250 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 text-zinc-800 bg-[#FAF9F6] font-mono leading-relaxed resize-none"
+                />
+                <p className="text-[9px] text-zinc-400 mt-1">
+                  Masukkan untuk menampilkan denah lokasi interaktif 3D di halaman undangan publik.
+                </p>
+
+                {mapsIframe && (
+                  <div className="mt-3 bg-zinc-50 border border-zinc-200 rounded-xl p-2.5">
+                    <span className="block text-[8px] font-bold text-zinc-400 uppercase tracking-wider mb-1 font-mono">Pratinjau Peta (Live Preview)</span>
+                    <div className="h-[120px] rounded-lg overflow-hidden border border-zinc-200">
+                      <iframe
+                        title="Live Maps Preview"
+                        src={(() => {
+                          let url = mapsIframe.trim();
+                          const srcMatch = url.match(/src="([^"]+)"/);
+                          if (srcMatch && srcMatch[1]) {
+                            return srcMatch[1];
+                          }
+                          return url;
+                        })()}
+                        className="w-full h-full border-none"
+                        loading="lazy"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Background Music Configuration Block */}
+            <div className="border-t border-amber-500/10 pt-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-amber-950 uppercase tracking-widest flex items-center gap-2">
+                    <Disc className="h-4 w-4 text-amber-600 animate-[spin_4s_linear_infinite]" /> 🎶 Musik Latar Belakang (Background Music)
+                  </h4>
+                  <p className="text-[10px] text-zinc-500">Atur musik latar yang otomatis diputar saat tamu membuka undangan digital.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-zinc-700">Aktifkan Musik</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={musicEnabled}
+                      onChange={(e) => setMusicEnabled(e.target.checked)}
+                    />
+                    <div className="w-9 h-5 bg-zinc-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              {musicEnabled && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/70 backdrop-blur-xs p-4 rounded-2xl border border-zinc-200 text-left">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[9px] font-extrabold text-zinc-800 uppercase tracking-wider mb-1.5">
+                        Pilih Koleksi Lagu Preset
+                      </label>
+                      <select
+                        value={[
+                          'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3',
+                          'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3',
+                          'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3',
+                          'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3',
+                          'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
+                        ].includes(musicUrl) ? musicUrl : 'custom'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'custom') {
+                            setMusicUrl(customMusicUrl || '');
+                          } else {
+                            setMusicUrl(val);
+                            if (val === 'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3') {
+                              setMusicTitle('Beautiful Dream Piano');
+                            } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3') {
+                              setMusicTitle('Sunny Day Acoustic');
+                            } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3') {
+                              setMusicTitle('Forest Trail Harp');
+                            } else if (val === 'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3') {
+                              setMusicTitle('Just Cool Elegant Jazz');
+                            } else if (val === 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3') {
+                              setMusicTitle('Traditional Gamelan Calm');
+                            }
+                          }
+                        }}
+                        className="block w-full border border-zinc-250 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 text-zinc-800 bg-[#FAF9F6]"
+                      >
+                        <option value="https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3">Beautiful Dream Piano (Wedding/Romantic)</option>
+                        <option value="https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3">Sunny Day Acoustic (Warm/Birthday)</option>
+                        <option value="https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3">Forest Trail Harp (Classical/Elegant)</option>
+                        <option value="https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3">Just Cool Elegant Jazz (Corp/Lounge)</option>
+                        <option value="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3">Traditional Instrumental Calm (Indonesian Gamelan)</option>
+                        <option value="custom">Custom MP3 Audio URL (Embed Tautan)</option>
+                      </select>
+                    </div>
+
+                    {(![
+                      'https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-sunny-day-warm-light-2550.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-forest-trail-1200.mp3',
+                      'https://assets.mixkit.co/music/preview/mixkit-just-cool-2216.mp3',
+                      'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
+                    ].includes(musicUrl) || musicUrl === '') && (
+                      <div>
+                        <label className="block text-[9px] font-extrabold text-zinc-800 uppercase tracking-wider mb-1.5">
+                          Tautan Custom MP3 Audio URL
+                        </label>
+                        <input
+                          type="url"
+                          placeholder="Masukkan tautan langsung file audio MP3 (akhiran .mp3)"
+                          value={customMusicUrl}
+                          onChange={(e) => {
+                            setCustomMusicUrl(e.target.value);
+                            setMusicUrl(e.target.value);
+                          }}
+                          className="block w-full border border-zinc-250 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 text-zinc-800 bg-[#FAF9F6] font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[9px] font-extrabold text-zinc-800 uppercase tracking-wider mb-1.5">
+                        Judul Tampilan Track Lagu
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Romantic Wedding Piano"
+                        value={musicTitle}
+                        onChange={(e) => setMusicTitle(e.target.value)}
+                        className="block w-full border border-zinc-250 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 text-zinc-800 bg-[#FAF9F6]"
+                      />
+                    </div>
+
+                    <div className="flex items-end pt-2">
+                      {musicUrl ? (
+                        <div className="w-full flex items-center gap-2">
+                          <audio id="creator-music-test-audio" src={musicUrl} loop />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const audioEl = document.getElementById('creator-music-test-audio') as HTMLAudioElement;
+                              if (audioEl) {
+                                if (isTestingMusic) {
+                                  audioEl.pause();
+                                  setIsTestingMusic(false);
+                                } else {
+                                  audioEl.play().catch(e => console.warn('Blocked autoplay test:', e));
+                                  setIsTestingMusic(true);
+                                }
+                              }
+                            }}
+                            className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                              isTestingMusic 
+                                ? 'bg-[#EEF2FF] border-indigo-200 text-indigo-700 font-extrabold shadow-sm' 
+                                : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 text-zinc-800'
+                            }`}
+                          >
+                            {isTestingMusic ? '⏸️ Hentikan Tes' : '▶️ Tes Lapangan (Play)'}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-[#b45309] block pl-1 font-semibold italic">Silakan masukkan URL atau pilih preset lagu.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* A/B Testing Toggle */}

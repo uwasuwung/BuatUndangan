@@ -36,6 +36,11 @@ export interface Event {
   longitude?: number;
   event_type?: 'wedding' | 'birthday' | 'corporate' | 'aqiqah' | 'webinar_seminar' | 'grand_opening' | 'concert' | 'charity' | 'graduation' | 'arisan' | 'sports' | 'religious' | 'rt_rw' | 'baby_shower' | 'other';
   custom_fields?: Record<string, any>;
+  music_url?: string;
+  music_enabled?: boolean;
+  music_title?: string;
+  maps_iframe?: string;
+  gallery_photos?: string[];
 }
 
 export interface Guest {

@@ -11,7 +11,7 @@ import {
   Heart, Calendar, MapPin, Music, Volume2, VolumeX, Mail, 
   Map, Sparkles, CheckSquare, MessageCircle, Clock, Users, ArrowRight,
   Download, Printer, Lock, Landmark, Image as ImageIcon, Camera, Compass,
-  Smartphone, Eye, HelpCircle, Laptop, Share2, Youtube, ExternalLink
+  Smartphone, Eye, HelpCircle, Laptop, Share2, Youtube, ExternalLink, ChevronLeft
 } from 'lucide-react';
 
 interface PublicInvitationProps {
@@ -26,6 +26,22 @@ export default function PublicInvitation({ eventSlug, guestLink, onNavigateBackT
   const [allEventGuests, setAllEventGuests] = useState<Guest[]>([]);
   const [hasOpenedInvitation, setHasOpenedInvitation] = useState(false);
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [activePhotoIdx, setActivePhotoIdx] = useState<number>(0);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  // Synchronize playback state with the actual audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isPlayingMusic && event?.music_enabled !== false) {
+        audioRef.current.play().catch(err => {
+          console.warn('Playback blocked or failed:', err);
+          setIsPlayingMusic(false);
+        });
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlayingMusic, event?.music_url, event?.music_enabled]);
 
   // RSVP Form States
   const [rsvpStatus, setRsvpStatus] = useState<'hadir' | 'tidak_hadir'>('hadir');
@@ -439,19 +455,31 @@ export default function PublicInvitation({ eventSlug, guestLink, onNavigateBackT
       'bg-[#fdfaf2] text-[#403525] font-serif-elegant'
     }`}>
       
-      {/* Background audio simulation bar widget */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={() => setIsPlayingMusic(!isPlayingMusic)}
-          className={`p-3 rounded-full shadow-xl flex items-center gap-2 border text-white transition-all ${
-            isPlayingMusic ? 'bg-emerald-600 animate-spin border-emerald-500' : 'bg-slate-705 bg-slate-900 border-slate-700'
-          }`}
-          title="Autoplay background music simulator toggle"
-        >
-          {isPlayingMusic ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-          {isPlayingMusic && <span className="text-[9px] font-bold font-mono pr-1.5 uppercase tracking-widest hidden sm:inline">MUSIC LIVE</span>}
-        </button>
-      </div>
+      {/* Background audio widget */}
+      {event?.music_enabled !== false && (
+        <div className="fixed bottom-6 right-6 z-45 flex items-center gap-2.5 bg-black/80 hover:bg-black/90 backdrop-blur-md pl-3.5 pr-4 py-2 rounded-full border border-zinc-800 shadow-xl transition-all max-w-[280px]">
+          <audio 
+            ref={audioRef} 
+            src={event?.music_url || "https://assets.mixkit.co/music/preview/mixkit-beautiful-dream-493.mp3"} 
+            loop 
+          />
+          <button
+            onClick={() => setIsPlayingMusic(!isPlayingMusic)}
+            className={`p-2 rounded-full flex items-center justify-center transition-all shrink-0 ${
+              isPlayingMusic ? 'bg-indigo-600 border-indigo-500 animate-[spin_6s_linear_infinite]' : 'bg-zinc-800 border-zinc-700'
+            }`}
+            title="Toggle background music"
+          >
+            {isPlayingMusic ? <Volume2 className="h-4 w-4 text-white" /> : <VolumeX className="h-4 w-4 text-white" />}
+          </button>
+          <div className="flex flex-col overflow-hidden text-left pr-1">
+            <span className="text-[7.5px] text-zinc-400 font-bold uppercase tracking-widest leading-none mb-0.5">MUSIC {isPlayingMusic ? 'PLAYING' : 'MUTED'}</span>
+            <span className="text-[10.5px] text-zinc-100 font-bold truncate leading-tight">
+              {event?.music_title || 'Romantic Wedding Piano'}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-2xl mx-auto px-4 space-y-12 pb-40">
         
@@ -578,6 +606,18 @@ export default function PublicInvitation({ eventSlug, guestLink, onNavigateBackT
                 <p className="text-[10px] font-bold uppercase text-slate-400">Lokasi Penyelenggaraan</p>
                 <p className="font-bold text-lg mt-1 truncate max-w-xs mx-auto text-zinc-950" title={event.location}>{event.location}</p>
                 
+                {event.maps_iframe && (
+                  <div className="mt-4 w-full max-w-sm mx-auto rounded-2xl overflow-hidden border border-slate-250/60 shadow-md">
+                    <iframe
+                      title="Peta Lokasi Interaktif"
+                      src={event.maps_iframe}
+                      className="w-full h-52 border-0"
+                      allowFullScreen
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+
                 <div className="mt-4 flex flex-col gap-2 items-center">
                   <a
                     href={`https://maps.google.com/?q=${encodeURIComponent(event.location)}`}
@@ -609,6 +649,84 @@ export default function PublicInvitation({ eventSlug, guestLink, onNavigateBackT
 
           </div>
         </section>
+
+        {/* --- PHOTO GALLERY CAROUSEL SECTION --- */}
+        {event && event.gallery_photos && event.gallery_photos.length > 0 && (
+          <section className={`rounded-3xl shadow-lg p-6 sm:p-8 border bg-white ${
+            template === 'bunga' ? 'border-rose-100' :
+            template === 'modern' ? 'bg-[#0e1628] border-slate-800 text-white' :
+            'border-[#dbaf5f]/40'
+          }`}>
+            <div className="text-center mb-6 space-y-1.5">
+              <span className={`inline-block text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full font-mono ${
+                template === 'bunga' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                template === 'modern' ? 'bg-purple-950/40 text-purple-400 border border-purple-900/50' :
+                'bg-amber-50 text-amber-800 border border-amber-100'
+              }`}>
+                ✨ SWEET MOMENTS & PORTRAITS
+              </span>
+              <h3 className={`text-xl font-extrabold tracking-tight ${template === 'modern' ? 'text-white' : 'text-slate-900'}`}>
+                Galeri Kebahagiaan Kami
+              </h3>
+              <p className={`text-xs max-w-md mx-auto leading-relaxed ${template === 'modern' ? 'text-slate-400' : 'text-slate-500'}`}>
+                Rangkaian foto perjalanan cinta dan potret pre-event indah yang mengabadikan komitmen tulus kami berdua.
+              </p>
+            </div>
+
+            {/* Main Interactive Carousel container */}
+            <div className="relative w-full max-w-xl mx-auto rounded-2xl overflow-hidden aspect-[4/3] bg-zinc-950 shadow-md group border border-slate-150">
+              <img
+                src={event.gallery_photos[activePhotoIdx]}
+                alt={`Engagement Photo ${activePhotoIdx + 1}`}
+                className="w-full h-full object-cover transition-all duration-700 ease-in-out"
+                referrerPolicy="no-referrer"
+              />
+
+              {/* Left Slider Navigation Button */}
+              <button
+                type="button"
+                onClick={() => setActivePhotoIdx((prev) => (prev === 0 ? event.gallery_photos!.length - 1 : prev - 1))}
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white text-zinc-900 rounded-full flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-md backdrop-blur-xs z-10 hover:shadow-lg"
+                title="Seterusnya"
+              >
+                <ChevronLeft className="h-5 w-5 stroke-[2.5]" />
+              </button>
+
+              {/* Right Slider Navigation Button */}
+              <button
+                type="button"
+                onClick={() => setActivePhotoIdx((prev) => (prev === event.gallery_photos!.length - 1 ? 0 : prev + 1))}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 hover:bg-white text-zinc-900 rounded-full flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-md backdrop-blur-xs z-10 hover:shadow-lg"
+                title="Berikutnya"
+              >
+                <ChevronLeft className="h-5 w-5 stroke-[2.5] rotate-180" />
+              </button>
+
+              {/* Hover Index Indicator Overlay Badge */}
+              <span className="absolute bottom-4 left-4 bg-black/75 backdrop-blur-md text-white text-[9.5px] font-bold px-3 py-1.5 rounded-full font-mono tracking-wider shadow-sm">
+                📸 {activePhotoIdx + 1} / {event.gallery_photos.length} FOTO
+              </span>
+            </div>
+
+            {/* Thumbnail Navigation Row */}
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 max-w-md mx-auto">
+              {event.gallery_photos.map((pt, ind) => (
+                <button
+                  key={ind}
+                  type="button"
+                  onClick={() => setActivePhotoIdx(ind)}
+                  className={`relative w-11 h-14 rounded-lg overflow-hidden border-2 cursor-pointer transition-all shrink-0 ${
+                    activePhotoIdx === ind 
+                      ? (template === 'bunga' ? 'border-rose-500 scale-105 shadow-md' : template === 'modern' ? 'border-purple-500 scale-105 shadow-md' : 'border-amber-500 scale-105 shadow-md') 
+                      : (template === 'modern' ? 'border-transparent opacity-40 hover:opacity-100' : 'border-transparent opacity-60 hover:opacity-100')
+                  }`}
+                >
+                  <img src={pt} alt={`Thumbnail ${ind + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* --- LIVE STREAM SECTION --- */}
         {event.live_stream_url && (

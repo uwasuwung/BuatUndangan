@@ -933,6 +933,11 @@ export class DBStore {
     if (updates.longitude !== undefined) event.longitude = updates.longitude;
     if (updates.event_type !== undefined) event.event_type = updates.event_type;
     if (updates.custom_fields !== undefined) event.custom_fields = updates.custom_fields;
+    if (updates.music_url !== undefined) event.music_url = updates.music_url;
+    if (updates.music_enabled !== undefined) event.music_enabled = updates.music_enabled;
+    if (updates.music_title !== undefined) event.music_title = updates.music_title;
+    if (updates.maps_iframe !== undefined) event.maps_iframe = updates.maps_iframe;
+    if (updates.gallery_photos !== undefined) event.gallery_photos = updates.gallery_photos;
 
     this.saveJSON('inv_events', this.events);
     this.notify();
